@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.so
+.venv/
+.pytest_cache/
+
+# Secrets
+.env
+
+# Runtime logs
+.turbo-agent*/
+
+# Frontend
+node_modules/
+/.pnp*
+/.yarn
+frontend/visualizer-dist/
