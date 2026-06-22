@@ -1,6 +1,6 @@
 """
-Verifier: best-of-N selection over candidate agent responses using the Pivot
-Preference Tournament (PPT) with a fine-grained logprob reward.
+Verifier: best-of-N selection over candidate agent responses using the
+Probabilistic Pivot Tournament (PPT) with a fine-grained logprob reward.
 
 Given the conversation history and N candidate responses, the verifier scores
 directed pairs (candidate `a` in slot A, `b` in slot B) with Gemini logprobs

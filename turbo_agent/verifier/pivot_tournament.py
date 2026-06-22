@@ -1,5 +1,5 @@
 """
-Pivot Preference Tournament (PPT): O(N·k) best-of-N selection.
+Probabilistic Pivot Tournament (PPT): O(N·k) best-of-N selection.
 
 A round-robin tournament compares all C(N, 2) pairs of candidates — O(N^2)
 verifier calls per request. PPT reaches the same selection with O(N·k)

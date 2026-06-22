@@ -17,7 +17,7 @@ candidate response tau given the conversation history t is
 This module provides the granularity-20 scale, the async Gemini logprob client,
 the score-token expectation `extract_score`, and the directed pairwise prompt.
 A "directed" comparison places candidate `a` in slot A and `b` in slot B; the
-ring pass of the Pivot Preference Tournament relies on this to cancel slot bias.
+ring pass of the Probabilistic Pivot Tournament relies on this to cancel slot bias.
 """
 
 import math
@@ -192,5 +192,36 @@ def build_prompt(history, action_a, action_b, criterion_name,
         "Then output your final scores:\n"
         f"<score_A>{SCALE['score_format']}</score_A>\n"
         f"<score_B>{SCALE['score_format']}</score_B>\n\n"
+        "Begin your analysis now."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pointwise prompt (one evaluation criterion, one trajectory)
+# ---------------------------------------------------------------------------
+
+def build_pointwise_prompt(trajectory, criterion_name, criterion_description,
+                           note):
+    """Pointwise variant of `build_prompt`: score a SINGLE trajectory on one
+    criterion using the same granularity-20 A-T scale. The score is read with
+    the same `extract_score` logprob expectation, so the reward is identical in
+    form to the pairwise reward, just for one trajectory."""
+    note_block = f"{note}\n\n" if note else ""
+    return (
+        "You are an expert evaluator of AI coding agents. "
+        "You will see one agent trajectory (the conversation so far, including "
+        "the agent's latest action). "
+        f"Your job is to evaluate it on ONE specific criterion: "
+        f"**{criterion_name}**.\n\n"
+        f"{note_block}"
+        f"**Trajectory:**\n{trajectory}\n\n"
+        f"**Evaluation Guideline — {criterion_name}:**\n"
+        f"{criterion_description}\n\n"
+        f"Score the trajectory ONLY on this specific criterion. Ignore other "
+        f"aspects of the trajectory that are not relevant to "
+        f"\"{criterion_name}\".\n\n"
+        f"**Rating Scale:**\n{SCALE['scale_description']}\n\n"
+        "Then output your final score:\n"
+        f"<score>{SCALE['score_format']}</score>\n\n"
         "Begin your analysis now."
     )

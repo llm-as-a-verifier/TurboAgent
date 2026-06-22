@@ -11,6 +11,7 @@ from .config import (
     ModelConfig,
     CriterionConfig,
     PivotTournamentConfig,
+    ProgressMonitorConfig,
 )
 from .conversion import AnthropicToOpenAI, OpenAIToAnthropic, STOP_REASON_MAP
 from .sse import SSEFormatter
@@ -28,6 +29,7 @@ __all__ = [
     "ModelConfig",
     "CriterionConfig",
     "PivotTournamentConfig",
+    "ProgressMonitorConfig",
     "AnthropicToOpenAI",
     "OpenAIToAnthropic",
     "STOP_REASON_MAP",

@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { EntryListItem } from '../types';
 
+// Poll interval for picking up newly written request logs.
+const REFRESH_MS = 2000;
+
+const sameIds = (a: EntryListItem[], b: EntryListItem[]) =>
+  a.length === b.length && a.every((x, i) => x.id === b[i].id);
+
 export default function Sidebar({
   selectedId,
   onSelect,
@@ -11,10 +17,23 @@ export default function Sidebar({
   const [entries, setEntries] = useState<EntryListItem[]>([]);
 
   useEffect(() => {
-    fetch('/visualizer/api/entries')
-      .then(r => r.json())
-      .then(setEntries)
-      .catch(() => {});
+    let cancelled = false;
+    const load = () =>
+      fetch('/visualizer/api/entries')
+        .then(r => r.json())
+        .then((data: EntryListItem[]) => {
+          if (cancelled) return;
+          // Avoid a re-render (and selection flicker) when nothing changed.
+          setEntries(prev => (sameIds(prev, data) ? prev : data));
+        })
+        .catch(() => {});
+
+    load();
+    const timer = setInterval(load, REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   return (
@@ -29,6 +48,19 @@ export default function Sidebar({
         Turbo Agent Logs
         <span style={{ color: '#64748b', fontWeight: 400, fontSize: 12, marginLeft: 8 }}>
           ({entries.length})
+        </span>
+        <span
+          title="Auto-refreshing"
+          style={{
+            float: 'right', display: 'inline-flex', alignItems: 'center', gap: 5,
+            color: '#22c55e', fontWeight: 400, fontSize: 11, marginTop: 2,
+          }}
+        >
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%', background: '#22c55e',
+            display: 'inline-block',
+          }} />
+          live
         </span>
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>

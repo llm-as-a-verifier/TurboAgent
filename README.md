@@ -1,6 +1,6 @@
 # Turbo Agent
 
-Claude Code plugin for LLM-as-a-Verifier. It implements an LLM API proxy that improves response quality through concurrent inference, verification, and refinement. It sits between your client (Claude Code, Codex, etc.) and the LLM provider, sending multiple parallel requests and selecting the best response with a **Pivot Preference Tournament (PPT)** scored by a fine-grained logprob verifier.
+Claude Code plugin for LLM-as-a-Verifier. It implements an LLM API proxy that improves response quality through concurrent inference, verification, and refinement. It sits between your client (Claude Code, Codex, etc.) and the LLM provider, sending multiple parallel requests and selecting the best response with a **Probabilistic Pivot Tournament (PPT)** scored by a fine-grained logprob verifier.
 
 ```
 Client request
@@ -22,9 +22,36 @@ The verifier scores **directed pairs** (candidate `a` in slot A, `b` in slot B) 
 pip install -e .
 ```
 
-The verifier uses Gemini logprobs, so set `GEMINI_API_KEY` (or `VERTEX_API_KEY`
-with `provider: vertex_ai` in the config) in the environment or a `.env` file
-next to `turbo-agent.yaml`.
+## API keys
+
+`turbo-agent.yaml` references keys with `$VAR_NAME` syntax. The recommended way to provide them is a `.env` file in the project root (next to `turbo-agent.yaml`) — the proxy loads it automatically on startup. Copy the committed template and fill in your keys:
+
+```bash
+cp .env.example .env
+# then edit .env
+```
+
+```bash
+# .env
+VERTEX_API_KEY=your-vertex-key     # preferred for Gemini 2.5 logprobs (verifier)
+# GEMINI_API_KEY=your-gemini-key     # used by gemini/ models (AI Studio)
+# OPENAI_API_KEY=...               # only if you route to openai/ models
+# ANTHROPIC_API_KEY=...            # only if you route to anthropic/ models
+```
+
+`.env` is gitignored; `.env.example` is committed as the template. Keys already
+exported in your shell environment work too and take nothing extra. The verifier
+and progress monitor use Gemini **logprobs**, which are best served by a Vertex
+AI key (`VERTEX_API_KEY` + `provider: vertex_ai` in the config); a plain
+`GEMINI_API_KEY` also works for the `gemini/` backend models.
+
+Verify your keys are valid with the script:
+
+```bash
+python check_api_key.py
+```
+
+It checks every supported provider (Gemini, Vertex AI, OpenAI, Anthropic) and reports each with ✅ / ❌ / ⚠️ / ⚪️, flagging which keys your config actually uses.
 
 ## Run
 
@@ -48,9 +75,6 @@ export OPENAI_API_BASE=http://localhost:8888/v1
 ## Configuration
 
 Edit `turbo-agent.yaml`. API keys can reference environment variables with `$VAR_NAME` syntax. See the reference `turbo-agent.yaml` file for reference and usage.
-
-Uncomment the optional `context:` section in `turbo-agent.yaml` to enable
-context refinement.
 
 ### Model prefixes
 

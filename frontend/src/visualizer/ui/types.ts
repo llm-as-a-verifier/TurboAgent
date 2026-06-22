@@ -86,8 +86,8 @@ export interface RequestLogEntry {
     score?: number;
     details?: {
       score: number;
-      rawProbs: Record<string, number>;
-      generatedText: string;
+      criterionScores?: Array<{ criterion: string; rep: number; score: number }>;
+      generatedText?: string;
     };
     error?: string;
   };

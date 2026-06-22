@@ -24,7 +24,7 @@ verifier:
     n_verifications: 1         # K: repeated verifications per directed pair
     seed: 0                    # seed for the random ring pass (reproducible)
     temperature: 1.0           # verifier sampling temperature
-    max_tokens: 2048           # verifier max output tokens
+    max_tokens: 4096           # verifier max output tokens
     note: >-                   # no ground truth is available at inference time
       There is no reference solution available. Judge each trajectory purely on
       how plausibly it solved the task correctly.
@@ -36,15 +36,44 @@ verifier:
           task's specific requirements. Trajectory length, number of steps, and
           apparent confidence do not predict correctness.
 
-context:                    # optional: rewrite/augment the prompt for clarity
-  refinement_model:
-    name: gemini/gemini-2.5-flash
-    api_key: $VERTEX_API_KEY
-  refinement_prompt: >-
-    Your goal is to construct clearer context for another LLM to solve the
-    problem. Read the context below thoroughly and produce a more specific,
-    helpful framing.
+# context:                    # optional: rewrite/augment the prompt for clarity
+#   refinement_model:
+#     name: gemini/gemini-2.5-flash
+#     api_key: $VERTEX_API_KEY
+#   refinement_prompt: >-
+#     Your goal is to construct clearer context for another LLM to solve the
+#     problem. Read the context below thoroughly and produce a more specific,
+#     helpful framing.
 
-    {context}
+#     {context}
 
-    The constructed context is:
+#     The constructed context is:
+
+progress_monitor:             # optional, post-hoc: scores the selected trajectory
+  model:                      # with the SAME fine-grained reward as the verifier
+    name: gemini/gemini-2.5-flash   # (G=20 A-T scale, C criteria x K reps). Runs
+    api_key: $VERTEX_API_KEY        # AFTER the response is selected; it never
+    provider: vertex_ai             # changes it. Surfaced in the visualizer.
+    max_top_logprobs: 20
+
+  n_verifications: 1          # K: repeated verifications per criterion
+  temperature: 1.0            # verifier sampling temperature
+  max_tokens: 2048            # verifier max output tokens
+
+  note: >-  # Additional prompt
+    Estimate how far the agent has progressed toward fully completing the task,
+    based only on the conversation and the actions actually taken. Do NOT trust
+    the agent's claims of success — judge by what it concretely did and verified.
+    There is no reference solution available.
+
+  criteria:
+    - name: Task Progress
+      description: >-
+        How much of the task the agent has verifiably completed, as a gradient.
+        The bottom of the scale is no meaningful work yet (still reading the
+        problem or exploring the environment). The middle is partial progress:
+        the relevant code has been located and edits begun, but the fix is
+        incomplete or unverified. The top of the scale is a complete solution
+        the agent has verified against the task's specific requirements. Reward
+        observed, verified progress over claimed progress; trajectory length and
+        number of steps do not by themselves indicate progress.

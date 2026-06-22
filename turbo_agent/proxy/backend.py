@@ -17,6 +17,7 @@ from ..utils import (
     save_request_log,
 )
 from ..context import ContextRefiner
+from ..progress_monitor import ProgressMonitor
 from ..verifier import Verifier
 
 logger = create_logger("backend")
@@ -32,6 +33,8 @@ class Backend:
 
         self.refiner: Optional[ContextRefiner] = None
         self.verifier: Optional[Verifier] = None
+        self.progress_monitor: Optional[ProgressMonitor] = None
+        self._bg_tasks: set = set()  # strong refs so background tasks aren't GC'd
 
         ctx_cfg = config.context_config
         if ctx_cfg:
@@ -44,6 +47,11 @@ class Backend:
             logger.info(
                 f"Verifier enabled (total_candidates={config.total_candidates})"
             )
+
+        pm_cfg = config.progress_monitor_config
+        if pm_cfg:
+            self.progress_monitor = ProgressMonitor(pm_cfg)
+            logger.info(f"Progress monitor enabled (model={pm_cfg.model.name})")
 
     def _setup_env(self) -> None:
         import os
@@ -124,6 +132,11 @@ class Backend:
             raw["verifier"] = {
                 **raw["verifier"],
                 "model": {**raw["verifier"]["model"], "api_key": "***"},
+            }
+        if raw.get("progress_monitor", {}).get("model"):
+            raw["progress_monitor"] = {
+                **raw["progress_monitor"],
+                "model": {**raw["progress_monitor"]["model"], "api_key": "***"},
             }
         return raw
 
@@ -250,6 +263,53 @@ class Backend:
 
         return best_resp, best_model
 
+    def _spawn_progress(
+        self, messages: list, final_response: Optional[dict], req_log: dict,
+    ) -> None:
+        """Kick off progress evaluation in the background so it never delays the
+        client's response. When it finishes it updates req_log and re-saves the
+        log file (already written once without progress)."""
+        if not self.progress_monitor:
+            return
+        log_dir = self.config.log_dir
+
+        async def _run() -> None:
+            await self._evaluate_progress(messages, final_response, req_log)
+            save_request_log(req_log, log_dir)
+
+        task = asyncio.create_task(_run())
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+
+    async def _evaluate_progress(
+        self, messages: list, final_response: Optional[dict],
+        req_log: Optional[dict] = None,
+    ) -> None:
+        """Post-hoc progress estimate. Runs after the response is selected and
+        never changes it — observability only. The score lands in the request
+        log and the visualizer's progress node."""
+        if not self.progress_monitor:
+            return
+        full_messages = list(messages)
+        if final_response and final_response.get("choices"):
+            full_messages.append({
+                "role": "assistant",
+                "content": Backend.format_action(final_response),
+            })
+        history_str = Backend.format_history(full_messages)
+        try:
+            result = await self.progress_monitor.evaluate(history_str)
+            if req_log is not None:
+                req_log["progressMonitor"] = {
+                    "enabled": True,
+                    "score": result.score,
+                    "details": result.to_dict(),
+                }
+        except Exception as e:
+            logger.error(f"Progress monitor failed: {type(e).__name__}: {e}")
+            if req_log is not None:
+                req_log["progressMonitor"] = {"enabled": True, "error": str(e)}
+
     @staticmethod
     def format_history(messages: list) -> str:
         parts: List[str] = []
@@ -361,6 +421,7 @@ class Backend:
         req_log["finalResponse"] = final_result
         req_log["elapsedMs"] = (time.monotonic() - start) * 1000
         save_request_log(req_log, self.config.log_dir)
+        self._spawn_progress(params["messages"], response, req_log)
         return final_result, None
 
     async def stream_anthropic(
@@ -394,6 +455,7 @@ class Backend:
             req_log["finalResponse"] = best_resp
             req_log["elapsedMs"] = (time.monotonic() - start) * 1000
             save_request_log(req_log, self.config.log_dir)
+            self._spawn_progress(params["messages"], best_resp, req_log)
             async for event in self._replay_anthropic_sse(best_resp, best_model):
                 yield event
             return
@@ -589,6 +651,7 @@ class Backend:
         req_log["finalResponse"] = final_result
         req_log["elapsedMs"] = (time.monotonic() - start) * 1000
         save_request_log(req_log, self.config.log_dir)
+        self._spawn_progress(params["messages"], final_result, req_log)
         return final_result, None
 
     async def stream_openai(
@@ -619,6 +682,7 @@ class Backend:
             req_log["finalResponse"] = best_resp
             req_log["elapsedMs"] = (time.monotonic() - start) * 1000
             save_request_log(req_log, self.config.log_dir)
+            self._spawn_progress(params["messages"], best_resp, req_log)
             async for event in self._replay_openai_sse(best_resp):
                 yield event
             return

@@ -23,7 +23,7 @@ class CriterionConfig:
 
 @dataclass
 class PivotTournamentConfig:
-    """Parameters for the Pivot Preference Tournament selection method."""
+    """Parameters for the Probabilistic Pivot Tournament selection method."""
     pivots: int = 2            # k: number of pivot (empirical-leader) candidates
     n_verifications: int = 4   # K: repeated verifications per directed pair
     seed: int = 0             # seed for the random ring pass (reproducible)
@@ -46,6 +46,34 @@ class ContextConfig:
     api_key: str
     refinement_prompt: str
 
+
+@dataclass
+class ProgressMonitorConfig:
+    """A post-hoc score for the selected trajectory, computed with the
+    pre-release fine-grained reward (G=20 A-T scale, C criteria x K reps).
+    Observability only — it never changes the response."""
+    model: ModelConfig
+    criteria: List[CriterionConfig] = field(default_factory=list)
+    n_verifications: int = 4   # K: repeated verifications per criterion
+    temperature: float = 1.0   # verifier sampling temperature
+    max_tokens: int = 4096     # verifier max output tokens
+    note: str = ""             # ground-truth note injected into the prompt
+
+
+# Default progress criterion used when the config declares none. Scored on the
+# same granularity-20 A-T scale, where the top of the scale = task complete.
+_DEFAULT_PROGRESS_CRITERIA = [
+    CriterionConfig(
+        name="Task Progress",
+        description=(
+            "How far the agent has progressed toward fully completing the "
+            "task. Rate higher when more of the task is verifiably done (a "
+            "complete, verified solution is the top of the scale) and lower "
+            "when little or no meaningful progress has been made. Judge by what "
+            "the agent actually did and verified, not by what it claimed."
+        ),
+    ),
+]
 
 # Default holistic criterion used when the config declares none.
 _DEFAULT_CRITERIA = [
@@ -178,6 +206,41 @@ class Config:
             model=model_cfg,
             method=method_cfg,
             majority_voting=raw_v.get("majority_voting", False),
+        )
+
+    # ------------------------------------------------------------------
+    # Progress monitor (optional, post-hoc observability)
+    # ------------------------------------------------------------------
+
+    @property
+    def progress_monitor_config(self) -> Optional[ProgressMonitorConfig]:
+        raw_pm = self._raw.get("progress_monitor")
+        if not raw_pm:
+            return None
+        raw_model = raw_pm.get("model")
+        if not raw_model or not raw_model.get("name"):
+            return None
+        raw_api_key = raw_model.get("api_key", "")
+        model_cfg = ModelConfig(
+            name=raw_model["name"],
+            provider=raw_model.get("provider"),
+            api_key=self._resolve_env(raw_api_key) if raw_api_key else None,
+            max_top_logprobs=raw_model.get("max_top_logprobs", 20),
+        )
+        criteria = [
+            CriterionConfig(
+                name=c.get("name", ""),
+                description=c.get("description", ""),
+            )
+            for c in raw_pm.get("criteria", [])
+        ] or list(_DEFAULT_PROGRESS_CRITERIA)
+        return ProgressMonitorConfig(
+            model=model_cfg,
+            criteria=criteria,
+            n_verifications=raw_pm.get("n_verifications", 4),
+            temperature=raw_pm.get("temperature", 1.0),
+            max_tokens=raw_pm.get("max_tokens", 4096),
+            note=raw_pm.get("note", ""),
         )
 
     # ------------------------------------------------------------------
