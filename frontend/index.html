@@ -8,6 +8,23 @@
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body, #root { width: 100%; height: 100%; }
       body { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace; background: #020617; color: #e2e8f0; }
+
+      /* Scrollbars */
+      * { scrollbar-color: #334155 #0f172a; }
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: #0f172a; }
+      ::-webkit-scrollbar-thumb { background: #334155; border-radius: 5px; }
+      ::-webkit-scrollbar-thumb:hover { background: #475569; }
+      ::-webkit-scrollbar-corner { background: #0f172a; }
+
+      /* React Flow zoom controls (+/-) */
+      .react-flow {
+        --xy-controls-button-background-color: #0f172a;
+        --xy-controls-button-background-color-hover: #1e293b;
+        --xy-controls-button-color: #e2e8f0;
+        --xy-controls-button-color-hover: #ffffff;
+        --xy-controls-button-border-color: #1e293b;
+      }
     </style>
   </head>
   <body>

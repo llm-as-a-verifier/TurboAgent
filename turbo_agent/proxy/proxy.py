@@ -38,7 +38,8 @@ class ProxyServer:
 
         @app.middleware("http")
         async def log_requests(request: Request, call_next):
-            logger.info(f"REQ incoming {request.method} {request.url.path}")
+            if not request.url.path.startswith("/visualizer"):
+                logger.info(f"REQ incoming {request.method} {request.url.path}")
             response = await call_next(request)
             return response
 
