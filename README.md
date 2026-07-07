@@ -16,9 +16,15 @@ Client request
 Best response → Client
 ```
 
-The verifier scores **directed pairs** (candidate `a` in slot A, `b` in slot B) with Gemini logprobs over a 20-token A–T scale, turns each pair's two fine-grained rewards into a soft Bradley-Terry win, and aggregates them through PPT — a ring pass, pivots = empirical leaders, then pivot rounds — to pick the best of `N` in `O(N·k)` comparisons instead of the `O(N²)` of full round-robin.
+Verification uses the pivot tournament from the [`llm-verifier`](https://pypi.org/project/llm-verifier/) package to pick the best of `N` candidates.
 
 ## Install
+
+```bash
+pip install turbo-agent
+```
+
+Or from source:
 
 ```bash
 pip install -e .

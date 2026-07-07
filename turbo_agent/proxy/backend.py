@@ -255,7 +255,6 @@ class Backend:
                 "enabled": True,
                 "scores": verifier_scores,
                 "comparisons": [c.to_dict() for c in result.comparisons],
-                "pivots": result.pivots,
                 "bestIndex": best_idx,
                 "bestModel": best_model,
                 "bestScore": best_score,
@@ -290,15 +289,14 @@ class Backend:
         log and the visualizer's progress node."""
         if not self.progress_monitor:
             return
-        full_messages = list(messages)
-        if final_response and final_response.get("choices"):
-            full_messages.append({
-                "role": "assistant",
-                "content": Backend.format_action(final_response),
-            })
-        history_str = Backend.format_history(full_messages)
+        problem = Backend.format_history(messages)
+        response_text = (
+            Backend.format_action(final_response)
+            if final_response and final_response.get("choices")
+            else "(empty response)"
+        )
         try:
-            result = await self.progress_monitor.evaluate(history_str)
+            result = await self.progress_monitor.evaluate(problem, response_text)
             if req_log is not None:
                 req_log["progressMonitor"] = {
                     "enabled": True,

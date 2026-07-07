@@ -12,7 +12,6 @@ class ModelConfig:
     name: str
     provider: Optional[str] = None
     api_key: Optional[str] = None
-    max_top_logprobs: int = 20
 
 
 @dataclass
@@ -27,8 +26,6 @@ class PivotTournamentConfig:
     pivots: int = 2            # k: number of pivot (empirical-leader) candidates
     n_verifications: int = 4   # K: repeated verifications per directed pair
     seed: int = 0             # seed for the random ring pass (reproducible)
-    temperature: float = 1.0   # verifier sampling temperature
-    max_tokens: int = 2048     # verifier max output tokens
     note: str = ""             # ground-truth note injected into the prompt
     criteria: List[CriterionConfig] = field(default_factory=list)
 
@@ -49,31 +46,12 @@ class ContextConfig:
 
 @dataclass
 class ProgressMonitorConfig:
-    """A post-hoc score for the selected trajectory, computed with the
-    pre-release fine-grained reward (G=20 A-T scale, C criteria x K reps).
-    Observability only — it never changes the response."""
+    """A post-hoc progress score for the selected trajectory, computed with
+    `llm_verifier.track` (K repeated verifications, averaged). Observability
+    only — it never changes the response."""
     model: ModelConfig
-    criteria: List[CriterionConfig] = field(default_factory=list)
-    n_verifications: int = 4   # K: repeated verifications per criterion
-    temperature: float = 1.0   # verifier sampling temperature
-    max_tokens: int = 4096     # verifier max output tokens
-    note: str = ""             # ground-truth note injected into the prompt
+    n_verifications: int = 4   # K: repeated verifications
 
-
-# Default progress criterion used when the config declares none. Scored on the
-# same granularity-20 A-T scale, where the top of the scale = task complete.
-_DEFAULT_PROGRESS_CRITERIA = [
-    CriterionConfig(
-        name="Task Progress",
-        description=(
-            "How far the agent has progressed toward fully completing the "
-            "task. Rate higher when more of the task is verifiably done (a "
-            "complete, verified solution is the top of the scale) and lower "
-            "when little or no meaningful progress has been made. Judge by what "
-            "the agent actually did and verified, not by what it claimed."
-        ),
-    ),
-]
 
 # Default holistic criterion used when the config declares none.
 _DEFAULT_CRITERIA = [
@@ -173,7 +151,6 @@ class Config:
             name=raw_model["name"],
             provider=raw_model.get("provider"),
             api_key=self._resolve_env(raw_api_key) if raw_api_key else None,
-            max_top_logprobs=raw_model.get("max_top_logprobs", 20),
         )
 
         raw_method = raw_v.get("method", {})
@@ -196,8 +173,6 @@ class Config:
             pivots=raw_method.get("pivots", 2),
             n_verifications=raw_method.get("n_verifications", 4),
             seed=raw_method.get("seed", 0),
-            temperature=raw_method.get("temperature", 1.0),
-            max_tokens=raw_method.get("max_tokens", 2048),
             note=raw_method.get("note", ""),
             criteria=criteria,
         )
@@ -225,22 +200,10 @@ class Config:
             name=raw_model["name"],
             provider=raw_model.get("provider"),
             api_key=self._resolve_env(raw_api_key) if raw_api_key else None,
-            max_top_logprobs=raw_model.get("max_top_logprobs", 20),
         )
-        criteria = [
-            CriterionConfig(
-                name=c.get("name", ""),
-                description=c.get("description", ""),
-            )
-            for c in raw_pm.get("criteria", [])
-        ] or list(_DEFAULT_PROGRESS_CRITERIA)
         return ProgressMonitorConfig(
             model=model_cfg,
-            criteria=criteria,
             n_verifications=raw_pm.get("n_verifications", 4),
-            temperature=raw_pm.get("temperature", 1.0),
-            max_tokens=raw_pm.get("max_tokens", 4096),
-            note=raw_pm.get("note", ""),
         )
 
     # ------------------------------------------------------------------

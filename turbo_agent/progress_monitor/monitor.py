@@ -1,50 +1,40 @@
 """
 Progress monitor: a post-hoc, observability-only score for the selected
-trajectory, computed with the EXACT fine-grained reward of `pre-release`.
+trajectory, computed with `llm_verifier.track`.
 
 It runs *after* the API response has been selected and returned — it never
-changes which response the client receives. The score is the pre-release
-fine-grained reward applied pointwise to the trajectory:
-
-    R(t, tau) = (1 / C K) * sum_c sum_k  extract_score( <score> | t, c, tau )
-
-  C = number of evaluation criteria
-  K = number of repeated verifications (n_verifications)
-
-Each (criterion, repetition) is one verifier call on the granularity-20 A-T
-scale; `extract_score` reads the token logprobs and takes the expectation over
-the ordered score tokens, normalized to [0, 1]. This is the same SCALE,
-`extract_score`, and C*K averaging the pivot-tournament verifier uses — just on
-a single trajectory instead of a directed pair. The result is recorded in the
-request log and surfaced as a node in the visualizer.
+changes which response the client receives. The conversation history is the
+task and the selected response is the trajectory step to score; `track` asks
+the verifier whether the agent's current state would satisfy the task's
+hidden grader, decodes the answer-letter logprob distribution into a
+continuous score in [0, 1], and averages it over `n_verifications` repeats.
+The result is recorded in the request log and surfaced as a node in the
+visualizer.
 """
 
 import asyncio
-from typing import List
+from typing import List, Optional
+
+import llm_verifier
 
 from ..utils import ProgressMonitorConfig, create_logger
-from ..verifier.fine_grained_reward import (
-    build_pointwise_prompt,
-    call_gemini,
-    create_gemini_client,
-    extract_score,
-)
 
 _logger = create_logger("progress_monitor")
 
 
 class ProgressMonitorResult:
-    def __init__(self, score: float, criterion_scores: List[dict],
-                 generated_text: str):
+    def __init__(self, score: float, rep_scores: List[Optional[float]]):
         self.score = score
-        self.criterion_scores = criterion_scores
-        self.generated_text = generated_text
+        self.rep_scores = rep_scores
 
     def to_dict(self) -> dict:
         return {
             "score": self.score,
-            "criterionScores": self.criterion_scores,
-            "generatedText": self.generated_text,
+            "criterionScores": [
+                {"criterion": "Task Progress", "rep": rep, "score": score}
+                for rep, score in enumerate(self.rep_scores)
+                if score is not None
+            ],
         }
 
 
@@ -55,48 +45,37 @@ class ProgressMonitor:
         self._client = None
         _logger.info(
             f"ProgressMonitor: model={cfg.model.name}, "
-            f"criteria={[c.name for c in cfg.criteria]}, "
             f"K={cfg.n_verifications}"
         )
 
     @property
     def client(self):
-        if self._client is None:
-            self._client = create_gemini_client(
-                api_key=self.cfg.model.api_key,
-                provider=self.cfg.model.provider,
-            )
+        """A google-genai client built from the config's api_key/provider;
+        None lets llm-verifier create one from the environment."""
+        if self._client is None and self.cfg.model.api_key:
+            from google import genai
+            if self.cfg.model.provider == "vertex_ai":
+                self._client = genai.Client(vertexai=True,
+                                            api_key=self.cfg.model.api_key)
+            else:
+                self._client = genai.Client(api_key=self.cfg.model.api_key)
         return self._client
 
-    async def evaluate(self, trajectory: str) -> ProgressMonitorResult:
-        """Fine-grained reward of the trajectory, averaged over every criterion
-        and repeated verification — exactly the pre-release R(t, tau)."""
+    async def evaluate(self, problem: str, response: str) -> ProgressMonitorResult:
+        """Progress score of the selected response on the task, averaged over
+        `n_verifications` repeated verifications."""
         cfg = self.cfg
-        jobs = [(crit, rep)
-                for crit in cfg.criteria
-                for rep in range(cfg.n_verifications)]
-
-        async def one(crit) -> tuple:
-            prompt = build_pointwise_prompt(
-                trajectory, crit.name, crit.description, cfg.note)
-            text, tokens, position_logprobs = await call_gemini(
-                self.client, self.model_id, prompt,
-                top_logprobs=cfg.model.max_top_logprobs,
-                temperature=cfg.temperature, max_tokens=cfg.max_tokens)
-            score = extract_score(text, tokens, position_logprobs, "<score>")
-            return score, text
-
-        results = await asyncio.gather(*[one(crit) for crit, _ in jobs])
-        scores = [r[0] for r in results]
-        reward = sum(scores) / len(scores) if scores else 0.5
-
-        criterion_scores = [
-            {"criterion": crit.name, "rep": rep, "score": score}
-            for (crit, rep), (score, _) in zip(jobs, results)
-        ]
-        _logger.info(
-            f"Progress reward: {reward:.3f} "
-            f"(C={len(cfg.criteria)} K={cfg.n_verifications}, "
-            f"{len(jobs)} verifier calls)"
+        result = await asyncio.to_thread(
+            llm_verifier.track,
+            problem,
+            [response],
+            n_evaluations=cfg.n_verifications,
+            model=self.model_id,
+            client=self.client,
         )
-        return ProgressMonitorResult(reward, criterion_scores, results[0][1])
+        rep_scores = [rep[0] for rep in result.per_rep_scores]
+        _logger.info(
+            f"Progress reward: {result.final:.3f} "
+            f"(K={cfg.n_verifications} verifier calls)"
+        )
+        return ProgressMonitorResult(result.final, rep_scores)
