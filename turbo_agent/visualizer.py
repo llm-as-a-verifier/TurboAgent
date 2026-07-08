@@ -15,9 +15,7 @@ _static_dir: str = ""
 def register_visualizer_routes(app, log_dir: str) -> None:
     global _log_dir, _static_dir
     _log_dir = log_dir
-    _static_dir = str(
-        Path(__file__).parent.parent / "frontend" / "visualizer-dist"
-    )
+    _static_dir = str(Path(__file__).parent / "visualizer-dist")
     app.include_router(router)
 
 

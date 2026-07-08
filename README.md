@@ -30,7 +30,9 @@ Or from source:
 pip install -e .
 ```
 
-## API keys
+## Setup
+
+For turbo agent to work, you need a `turbo-agent.yaml`. You can copy the reference file in this repo.
 
 `turbo-agent.yaml` references keys with `$VAR_NAME` syntax. The recommended way to provide them is a `.env` file in the project root (next to `turbo-agent.yaml`) — the proxy loads it automatically on startup. Copy the committed template and fill in your keys:
 
@@ -53,10 +55,10 @@ and progress monitor use Gemini **logprobs**, which are best served by a Vertex
 AI key (`VERTEX_API_KEY` + `provider: vertex_ai` in the config); a plain
 `GEMINI_API_KEY` also works for the `gemini/` backend models.
 
-Verify your keys are valid with the script:
+Verify your keys are valid:
 
 ```bash
-python check_api_key.py
+turbo-agent check
 ```
 
 It checks every supported provider (Gemini, Vertex AI, OpenAI, Anthropic) and reports each with ✅ / ❌ / ⚠️ / ⚪️, flagging which keys your config actually uses.
@@ -113,4 +115,15 @@ To build the frontend (requires Node.js):
 cd frontend
 yarn install
 yarn build
+```
+
+## Publish to PyPI
+
+```bash
+cd frontend && yarn build && cd ..
+pip install build twine
+rm -rf dist
+python -m build
+twine check dist/*
+twine upload dist/*
 ```

@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 import uvicorn
 
@@ -10,7 +11,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Turbo Agent Proxy")
     parser.add_argument("-p", "--port", type=int, default=8888)
     parser.add_argument("--host", type=str, default="0.0.0.0")
+    subparsers = parser.add_subparsers(dest="command")
+    subparsers.add_parser("check", help="Check provider API keys")
     args = parser.parse_args()
+
+    if args.command == "check":
+        from . import check_api_key
+
+        sys.exit(check_api_key.main())
 
     server = ProxyServer()
 

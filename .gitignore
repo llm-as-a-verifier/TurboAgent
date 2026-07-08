@@ -20,4 +20,4 @@ build/
 node_modules/
 /.pnp*
 /.yarn
-frontend/visualizer-dist/
+turbo_agent/visualizer-dist/

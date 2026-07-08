@@ -14,7 +14,7 @@ The Vertex AI check also confirms token logprobs are returned, since the
 pivot-tournament verifier depends on them.
 
 Usage:
-    python check_api_key.py
+    turbo-agent check
 """
 
 import os
@@ -26,7 +26,8 @@ from typing import List, Optional, Tuple
 
 import httpx
 
-ROOT = Path(__file__).resolve().parent
+# .env and turbo-agent.yaml are resolved from the directory the user runs in.
+ROOT = Path.cwd()
 
 # Keywords that mark an error as an authentication / key problem (vs. anything
 # else, like a wrong model name or a transient network error).

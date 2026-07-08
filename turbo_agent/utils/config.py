@@ -70,9 +70,13 @@ _DEFAULT_CRITERIA = [
 class Config:
     def __init__(self, config_path: Optional[str] = None):
         if config_path is None:
-            config_path = str(
-                Path(__file__).parent.parent.parent / "turbo-agent.yaml"
-            )
+            config_path = str(Path.cwd() / "turbo-agent.yaml")
+            if not Path(config_path).exists():
+                raise FileNotFoundError(
+                    f"No turbo-agent.yaml found in {Path.cwd()}. "
+                    "Run turbo-agent from a directory containing a "
+                    "turbo-agent.yaml config file."
+                )
 
         # Load .env from the same directory as the config file.
         env_path = Path(config_path).parent / ".env"

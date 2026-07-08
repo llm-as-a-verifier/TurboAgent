@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "turbo-agent"
-version = "0.1.0"
+version = "0.1.2"
 description = "An LLM API proxy that improves response quality through concurrent inference, pivot-tournament verification, and context refinement."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,4 +26,4 @@ turbo-agent = "turbo_agent.cli:main"
 include = ["turbo_agent*"]
 
 [tool.setuptools.package-data]
-turbo_agent = ["../frontend/visualizer-dist/**/*"]
+turbo_agent = ["visualizer-dist/**/*"]

@@ -7,7 +7,8 @@ export default defineConfig({
   base: '/visualizer/',
   root: '.',
   build: {
-    outDir: 'visualizer-dist',
+    outDir: '../turbo_agent/visualizer-dist',
+    emptyOutDir: true,
   },
   resolve: {
     alias: {
