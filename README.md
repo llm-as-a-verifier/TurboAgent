@@ -43,8 +43,8 @@ cp .env.example .env
 
 ```bash
 # .env
-VERTEX_API_KEY=your-vertex-key     # preferred for Gemini 2.5 logprobs (verifier)
-# GEMINI_API_KEY=your-gemini-key     # used by gemini/ models (AI Studio)
+VERTEX_API_KEY=your-vertex-key     # Vertex-backed Gemini verifier
+# GEMINI_API_KEY=your-gemini-key     # Gemini Developer API backend or verifier
 # OPENAI_API_KEY=...               # only if you route to openai/ models
 # ANTHROPIC_API_KEY=...            # only if you route to anthropic/ models
 ```
@@ -93,7 +93,45 @@ Edit `turbo-agent.yaml`. API keys can reference environment variables with `$VAR
 | `gemini/` | Google Gemini |
 | `openai/` | OpenAI |
 | `anthropic/` | Anthropic |
+| `claude-cli/default` | Claude Code subscription CLI (text-only candidates) |
+| `codex-cli/default` | Codex ChatGPT subscription CLI (text-only candidates) |
 | (none) | OpenAI-compatible endpoint |
+
+### Subscription CLI candidates
+
+`claude-cli/default` and `codex-cli/default` generate candidates through the
+installed first-party CLIs. They reject API keys, sampling controls, client
+tool calls, logprobs, and direct streaming. Turbo Agent still creates parallel
+candidates with `num_candidates`; each CLI invocation returns one text result.
+
+The CLI subprocesses receive a default-deny environment containing only normal
+runtime state and the selected CLI's subscription-auth surface. Claude runs in
+plan mode with read/search tools, while Codex runs with an ephemeral read-only
+sandbox and ignores user provider configuration.
+
+```yaml
+backend:
+  models:
+    - name: claude-cli/default
+      num_candidates: 1
+    - name: codex-cli/default
+      num_candidates: 1
+
+verifier:
+  model:
+    name: gemini/gemini-3.5-flash
+    api_key: $GEMINI_API_KEY
+  majority_voting: false
+  method:
+    name: pivot_tournament
+    pivots: 1
+    n_verifications: 1
+    seed: 0
+```
+
+This configuration uses the Gemini Developer API for verifier logprobs; it
+does not require Vertex AI. Candidate authentication must already be available
+through Claude Code OAuth and `codex login` with ChatGPT.
 
 ## API endpoints
 
