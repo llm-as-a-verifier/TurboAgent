@@ -122,6 +122,7 @@ verifier:
     name: gemini/gemini-3.5-flash
     api_key: $GEMINI_API_KEY
   majority_voting: false
+  require_logprobs: true
   method:
     name: pivot_tournament
     pivots: 1
@@ -132,6 +133,8 @@ verifier:
 This configuration uses the Gemini Developer API for verifier logprobs; it
 does not require Vertex AI. Candidate authentication must already be available
 through Claude Code OAuth and `codex login` with ChatGPT.
+`require_logprobs: true` rejects textual score fallbacks and records the actual
+validated verifier-call count in each request log.
 
 ## API endpoints
 

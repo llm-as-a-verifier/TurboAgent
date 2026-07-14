@@ -253,6 +253,8 @@ class Backend:
         if req_log:
             req_log["verifier"] = {
                 "enabled": True,
+                "logprobsObserved": result.logprob_calls > 0,
+                "logprobCalls": result.logprob_calls,
                 "scores": verifier_scores,
                 "comparisons": [c.to_dict() for c in result.comparisons],
                 "bestIndex": best_idx,

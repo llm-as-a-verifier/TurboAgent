@@ -13,8 +13,10 @@ visualizer displays.
 
 import asyncio
 import json
+import math
 import os
 import tempfile
+import threading
 from typing import List, Optional
 
 import llm_verifier
@@ -24,6 +26,74 @@ from llm_verifier.prompts import normalize_criteria
 from ..utils import VerifierConfig, create_logger
 
 _logger = create_logger("verifier")
+
+_SCORE_TOKENS = frozenset("ABCDEFGHIJKLMNOPQRSTabcdefghijklmnopqrst")
+
+
+def _has_score_tag_distribution(tokens, positions, tag: str) -> bool:
+    text_so_far = ""
+    for index, token in enumerate(tokens):
+        text_so_far += str(token)
+        if not text_so_far.rstrip().endswith(tag):
+            continue
+        if index + 1 >= len(positions):
+            return False
+        candidates = getattr(positions[index + 1], "candidates", None) or []
+        for candidate in candidates:
+            score_token = str(getattr(candidate, "token", "")).strip()
+            logprob = getattr(candidate, "log_probability", None)
+            if score_token in _SCORE_TOKENS:
+                try:
+                    if math.isfinite(float(logprob)):
+                        return True
+                except (TypeError, ValueError):
+                    pass
+        return False
+    return False
+
+
+class _StrictGeminiModels:
+    def __init__(self, inner, owner):
+        self._inner = inner
+        self._owner = owner
+
+    def generate_content(self, *args, **kwargs):
+        response = self._inner.generate_content(*args, **kwargs)
+        self._owner.record(response)
+        return response
+
+
+class StrictGeminiClient:
+    """Request-local Gemini proxy that rejects llm-verifier text fallbacks."""
+
+    def __init__(self, inner):
+        self.models = _StrictGeminiModels(inner.models, self)
+        self._lock = threading.Lock()
+        self._validated_calls = 0
+
+    @property
+    def validated_calls(self) -> int:
+        with self._lock:
+            return self._validated_calls
+
+    def record(self, response) -> None:
+        candidates = getattr(response, "candidates", None) or []
+        result = (
+            getattr(candidates[0], "logprobs_result", None)
+            if candidates else None
+        )
+        chosen = getattr(result, "chosen_candidates", None) if result else None
+        positions = getattr(result, "top_candidates", None) if result else None
+        tokens = [getattr(candidate, "token", "") for candidate in chosen or []]
+        if not tokens or not positions or not all(
+            _has_score_tag_distribution(tokens, positions, tag)
+            for tag in ("<score_A>", "<score_B>")
+        ):
+            raise RuntimeError(
+                "Gemini verifier response omitted required score-tag logprobs"
+            )
+        with self._lock:
+            self._validated_calls += 1
 
 
 class Comparison:
@@ -58,10 +128,11 @@ class Comparison:
 
 class SelectionResult:
     def __init__(self, best_index: int, scores: List[float],
-                 comparisons: List[Comparison]):
+                 comparisons: List[Comparison], logprob_calls: int = 0):
         self.best_index = best_index
         self.scores = scores
         self.comparisons = comparisons
+        self.logprob_calls = logprob_calls
 
 
 class Verifier:
@@ -69,6 +140,12 @@ class Verifier:
         self.cfg = cfg
         self.method = cfg.method
         self.model_id = cfg.model.name.removeprefix("gemini/")
+        self.require_logprobs = cfg.require_logprobs
+        if self.require_logprobs:
+            if not cfg.model.name.startswith("gemini/"):
+                raise ValueError("require_logprobs currently supports Gemini only")
+            if not cfg.model.api_key:
+                raise ValueError("require_logprobs needs an explicit verifier api_key")
         self.criteria = normalize_criteria(
             [{"name": c.name, "description": c.description}
              for c in self.method.criteria]
@@ -110,7 +187,7 @@ class Verifier:
         if majority is not None:
             return majority
 
-        result, pair_scores = await asyncio.to_thread(
+        result, pair_scores, logprob_calls = await asyncio.to_thread(
             self._run_select, history, actions)
         comparisons = self._build_comparisons(history, actions, pair_scores)
 
@@ -119,7 +196,8 @@ class Verifier:
             f"scores=[{', '.join(f'{s:.3f}' for s in result.scores)}] "
             f"best={result.index}"
         )
-        return SelectionResult(result.index, result.scores, comparisons)
+        return SelectionResult(
+            result.index, result.scores, comparisons, logprob_calls)
 
     # ------------------------------------------------------------------
     # llm-verifier tournament
@@ -132,6 +210,10 @@ class Verifier:
         m = self.method
         with tempfile.TemporaryDirectory() as tmp:
             cache = os.path.join(tmp, "scores.json")
+            client = self.client
+            strict_client = (
+                StrictGeminiClient(client) if self.require_logprobs else client
+            )
             result = llm_verifier.select(
                 history,
                 actions,
@@ -141,15 +223,21 @@ class Verifier:
                 pivots=m.pivots,
                 seed=m.seed,
                 model=self.model_id,
-                client=self.client,
+                client=strict_client,
                 cache=cache,
                 progress=False,
+                on_error="raise" if self.require_logprobs else "tie",
             )
             pair_scores = {}
             if os.path.exists(cache):
                 with open(cache) as f:
                     pair_scores = json.load(f)
-        return result, pair_scores
+            logprob_calls = (
+                strict_client.validated_calls if self.require_logprobs else 0
+            )
+            if self.require_logprobs and logprob_calls == 0:
+                raise RuntimeError("Verifier produced no validated logprob calls")
+        return result, pair_scores, logprob_calls
 
     def _build_comparisons(
         self, history: str, actions: List[str], pair_scores: dict,

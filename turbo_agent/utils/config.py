@@ -35,6 +35,7 @@ class VerifierConfig:
     model: ModelConfig
     method: PivotTournamentConfig
     majority_voting: bool = False
+    require_logprobs: bool = False
 
 
 @dataclass
@@ -185,6 +186,7 @@ class Config:
             model=model_cfg,
             method=method_cfg,
             majority_voting=raw_v.get("majority_voting", False),
+            require_logprobs=raw_v.get("require_logprobs", False),
         )
 
     # ------------------------------------------------------------------
