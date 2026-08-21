@@ -178,8 +178,33 @@ class Backend:
             resp = await llm_completion(**p)
             return resp, name
 
-        tasks = [call_model(entry) for entry in entries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Cache priming: run one request per distinct model to completion first.
+        # The provider writes the shared prompt prefix (tools+system+messages)
+        # to its cache during that request's prefill, long before it finishes
+        # generating -- so by the time it returns, the cache write is done.
+        # The remaining identical requests then read the cache instead of
+        # racing as parallel full-price cache writes.
+        primed: set = set()
+        primer_entries: List[dict] = []
+        rest_entries: List[dict] = []
+        for entry in entries:
+            if entry["name"] not in primed:
+                primed.add(entry["name"])
+                primer_entries.append(entry)
+            else:
+                rest_entries.append(entry)
+
+        results: List[Any] = []
+        for entry in primer_entries:
+            try:
+                results.append(await call_model(entry))
+            except Exception as e:
+                results.append(e)
+        if rest_entries:
+            results += await asyncio.gather(
+                *(call_model(entry) for entry in rest_entries),
+                return_exceptions=True,
+            )
 
         successes: List[Tuple[dict, str]] = []
         errors: List[Exception] = []
