@@ -105,6 +105,34 @@ Edit `turbo-agent.yaml`. API keys can reference environment variables with `$VAR
 | `GET /visualizer` | Pipeline visualizer UI |
 | `*` | Upstream passthrough to api.anthropic.com |
 
+## Caching Support
+
+Turbo Agent supports **prompt caching** for qualifying providers. See [`CACHING_REVIEW.md`](./CACHING_REVIEW.md) for detailed algorithm validation and implementation status.
+
+### Current Status by Provider
+
+| Provider | Support | Status |
+|----------|---------|--------|
+| **Anthropic** | Prompt Caching | ✅ Pass-through (client-initiated) |
+| **OpenAI** | None | ⚠️ Not supported; silently ignored |
+| **Google Gemini** | CachedContent API | ❌ Disabled by design |
+| **Vertex AI** | CachedContent API | ❌ Disabled by design |
+
+**Anthropic (Claude)**: The proxy preserves `cache_control` metadata from client requests and passes it through to the Anthropic API. Include `cache_control: {type: "ephemeral"}` in your message blocks to enable caching.
+
+**OpenAI**: Prompt caching is not yet supported by OpenAI models. Cache control headers in requests are silently ignored.
+
+**Gemini/VertexAI**: Caching is intentionally disabled due to API incompatibility. Gemini's `CachedContent` API requires a 2-phase workflow (separate resource creation) that conflicts with TurboAgent's single-request model. Implementing this would require significant architectural changes.
+
+### Future Improvements
+
+- [ ] Add `caching` configuration section to `turbo-agent.yaml` for provider-specific settings
+- [ ] Implement cache telemetry in request logs (creation/read tokens)
+- [ ] Support Gemini caching with 2-phase initialization (high effort, requires redesign)
+- [ ] Add warnings when clients request unsupported caching features
+
+See [`CACHING_REVIEW.md`](./CACHING_REVIEW.md) for detailed recommendations and implementation roadmap.
+
 ## Visualizer
 
 A built-in web UI at `http://localhost:8888/visualizer` shows the pipeline DAG for each request — context refinement, all candidate responses, the pairwise tournament comparisons and scores, and the final selection.
