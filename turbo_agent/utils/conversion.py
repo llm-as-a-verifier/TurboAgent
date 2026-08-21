@@ -19,15 +19,21 @@ class AnthropicToOpenAI:
 
         t = block.get("type")
         if t == "text":
-            return {"type": "text", "text": block.get("text", "")}
+            result: dict = {"type": "text", "text": block.get("text", "")}
+            if block.get("cache_control") is not None:
+                result["cache_control"] = block["cache_control"]
+            return result
         if t == "image":
             source = block.get("source", {})
-            return {
+            result = {
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:{source.get('media_type', 'image/png')};base64,{source.get('data', '')}",
                 },
             }
+            if block.get("cache_control") is not None:
+                result["cache_control"] = block["cache_control"]
+            return result
         if t in ("tool_use", "tool_result"):
             return None
         if block.get("text"):
@@ -52,16 +58,35 @@ class AnthropicToOpenAI:
             if isinstance(system, str):
                 openai_messages.append({"role": "system", "content": system})
             elif isinstance(system, list):
-                text_parts = []
-                for block in system:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text_parts.append(block["text"])
-                    elif isinstance(block, str):
-                        text_parts.append(block)
-                if text_parts:
-                    openai_messages.append(
-                        {"role": "system", "content": "\n".join(text_parts)}
-                    )
+                has_cache_control = any(
+                    isinstance(block, dict) and block.get("cache_control") is not None
+                    for block in system
+                )
+                if has_cache_control:
+                    # Preserve block boundaries so each block's cache_control
+                    # breakpoint survives the conversion.
+                    blocks = []
+                    for block in system:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            b = {"type": "text", "text": block.get("text", "")}
+                            if block.get("cache_control") is not None:
+                                b["cache_control"] = block["cache_control"]
+                            blocks.append(b)
+                        elif isinstance(block, str):
+                            blocks.append({"type": "text", "text": block})
+                    if blocks:
+                        openai_messages.append({"role": "system", "content": blocks})
+                else:
+                    text_parts = []
+                    for block in system:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            text_parts.append(block["text"])
+                        elif isinstance(block, str):
+                            text_parts.append(block)
+                    if text_parts:
+                        openai_messages.append(
+                            {"role": "system", "content": "\n".join(text_parts)}
+                        )
 
         for msg in anthropic_body.get("messages", []):
             role = msg.get("role")
@@ -123,11 +148,12 @@ class AnthropicToOpenAI:
     def _convert_assistant_message(content: list) -> dict:
         tool_calls = []
         text_parts = []
+        text_cache_control = None
 
         for block in content:
             if isinstance(block, dict) and block.get("type") == "tool_use":
                 tool_input = block.get("input", {})
-                tool_calls.append({
+                tool_call: dict = {
                     "id": block.get("id", ""),
                     "type": "function",
                     "function": {
@@ -138,15 +164,26 @@ class AnthropicToOpenAI:
                             else str(tool_input)
                         ),
                     },
-                })
+                }
+                if block.get("cache_control") is not None:
+                    tool_call["cache_control"] = block["cache_control"]
+                tool_calls.append(tool_call)
             elif isinstance(block, dict) and block.get("type") == "text":
                 text_parts.append(block["text"])
+                if block.get("cache_control") is not None:
+                    text_cache_control = block["cache_control"]
             elif isinstance(block, str):
                 text_parts.append(block)
             # Skip thinking, thinking_delta, and other Claude-specific blocks
 
         oai_msg: dict = {"role": "assistant"}
-        oai_msg["content"] = "\n".join(text_parts) if text_parts else None
+        joined_text = "\n".join(text_parts) if text_parts else None
+        if text_cache_control is not None and joined_text is not None:
+            oai_msg["content"] = [
+                {"type": "text", "text": joined_text, "cache_control": text_cache_control}
+            ]
+        else:
+            oai_msg["content"] = joined_text
         if tool_calls:
             oai_msg["tool_calls"] = tool_calls
         return oai_msg
@@ -197,11 +234,14 @@ class AnthropicToOpenAI:
                         elif isinstance(b, str):
                             texts.append(b)
                     tr_content = "\n".join(texts)
-                results.append({
+                tool_msg: dict = {
                     "role": "tool",
                     "tool_call_id": block.get("tool_use_id", ""),
                     "content": str(tr_content) if tr_content else "",
-                })
+                }
+                if block.get("cache_control") is not None:
+                    tool_msg["cache_control"] = block["cache_control"]
+                results.append(tool_msg)
             else:
                 converted = AnthropicToOpenAI.content_block(block)
                 if converted is not None:
@@ -216,6 +256,7 @@ class AnthropicToOpenAI:
                 len(regular_parts) == 1
                 and isinstance(regular_parts[0], dict)
                 and regular_parts[0].get("type") == "text"
+                and "cache_control" not in regular_parts[0]
             ):
                 msgs.append({"role": "user", "content": regular_parts[0]["text"]})
             else:
@@ -256,8 +297,9 @@ class AnthropicToOpenAI:
 
     @staticmethod
     def tools(anthropic_tools: list) -> list:
-        return [
-            {
+        result = []
+        for tool in anthropic_tools:
+            entry: dict = {
                 "type": "function",
                 "function": {
                     "name": tool.get("name", ""),
@@ -265,8 +307,10 @@ class AnthropicToOpenAI:
                     "parameters": tool.get("input_schema", {}),
                 },
             }
-            for tool in anthropic_tools
-        ]
+            if tool.get("cache_control") is not None:
+                entry["cache_control"] = tool["cache_control"]
+            result.append(entry)
+        return result
 
     @staticmethod
     def tool_choice(anthropic_tool_choice: dict) -> Any:
