@@ -190,7 +190,9 @@ verifier:
 
 ## Caching Support
 
-Turbo Agent supports **prompt caching** for qualifying providers. See [`CACHING_REVIEW.md`](./CACHING_REVIEW.md) for detailed algorithm validation and implementation status.
+Turbo Agent supports **prompt caching** for qualifying providers. See the [`docs/`](./docs) folder for detailed analysis:
+- [`CACHING_SUMMARY.md`](./docs/CACHING_SUMMARY.md) — High-level overview and implementation story
+- [`CACHING_REVIEW.md`](./docs/CACHING_REVIEW.md) — Deep technical review by provider
 
 ### Current Status by Provider
 
@@ -214,7 +216,7 @@ Turbo Agent supports **prompt caching** for qualifying providers. See [`CACHING_
 - [ ] Support Gemini caching with 2-phase initialization (high effort, requires redesign)
 - [ ] Add warnings when clients request unsupported caching features
 
-See [`CACHING_REVIEW.md`](./CACHING_REVIEW.md) for detailed recommendations and implementation roadmap.
+See [`docs/CACHING_REVIEW.md`](./docs/CACHING_REVIEW.md) for detailed recommendations and implementation roadmap.
 
 ## Visualizer
 
