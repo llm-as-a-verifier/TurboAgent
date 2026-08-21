@@ -61,7 +61,7 @@ Verify your keys are valid:
 turbo-agent check
 ```
 
-It checks every supported provider (Gemini, Vertex AI, OpenAI, Anthropic) and reports each with ✅ / ❌ / ⚠️ / ⚪️, flagging which keys your config actually uses.
+It checks every supported provider (Gemini, Vertex AI, DeepSeek, OpenAI, Anthropic) and reports each with ✅ / ❌ / ⚠️ / ⚪️, flagging which keys your config actually uses. The Vertex and DeepSeek checks also confirm the backend returns token logprobs, which the verifier needs.
 
 ## Run
 
@@ -76,7 +76,69 @@ turbo-agent -p 9000           # custom port
 ANTHROPIC_BASE_URL=http://localhost:8888 claude
 ```
 
-### Use with OpenAI-compatible clients
+### Use Claude as the backend model
+
+Claude generates candidates like any other backend — put it under
+`backend.models` with an `anthropic/` prefix:
+
+```yaml
+backend:
+  models:
+    - name: anthropic/claude-opus-4-5
+      api_key: $ANTHROPIC_API_KEY
+      num_candidates: 3
+```
+
+**Claude cannot be the verifier.** The fine-grained reward is an expectation
+over the verifier's score-token distribution, and the Anthropic Messages API
+returns no token logprobs — there is nothing to take an expectation over.
+Configuring `anthropic/` under `verifier.model` raises an error rather than
+failing somewhere downstream. Generate with Claude, verify with a logprob
+backend (`deepseek/`, `openai/`, or `gemini/` on Vertex).
+
+### Use with opencode
+
+opencode reaches any OpenAI-compatible endpoint through a custom provider, so
+no plugin is needed — point one at the proxy in `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "turbo-agent": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Turbo Agent",
+      "options": {
+        "baseURL": "http://localhost:8888/v1",
+        "apiKey": "unused"
+      },
+      "models": {
+        "deepseek/deepseek-chat": { "name": "DeepSeek (verified)" }
+      }
+    }
+  }
+}
+```
+
+Run `turbo-agent` in one terminal, then `opencode` in another and pick the
+model with `/models`.
+
+Two things to know:
+
+- The model id must match a `backend.models[].name` in your `turbo-agent.yaml`
+  — that is what `GET /v1/models` reports. The proxy routes on its own config,
+  not on the model in the request.
+- With the verifier on, the proxy answers once the tournament has picked a
+  winner, so the reply arrives as a single burst rather than token by token.
+  Tool calls survive that replay intact; it is the latency that changes.
+
+The proxy's `/v1/messages` endpoint works the same way if you would rather
+point opencode's `anthropic` provider at it with a `baseURL` override. The
+OpenAI-compatible route above is the easier one: a custom provider takes an
+arbitrary model id, whereas the Anthropic provider caps output at 4096 tokens
+for model ids it does not recognise unless you set an explicit `limit`.
+
+### Use with other OpenAI-compatible clients
 
 ```bash
 export OPENAI_API_BASE=http://localhost:8888/v1
@@ -91,9 +153,30 @@ Edit `turbo-agent.yaml`. API keys can reference environment variables with `$VAR
 | Prefix | Provider |
 |--------|----------|
 | `gemini/` | Google Gemini |
+| `deepseek/` | DeepSeek |
 | `openai/` | OpenAI |
 | `anthropic/` | Anthropic |
 | (none) | OpenAI-compatible endpoint |
+
+The same prefixes select the **verifier** backend, except `anthropic/`. The verifier scores with
+token logprobs, so it needs a backend that returns them: Gemini through Vertex
+AI (`provider: vertex_ai`), DeepSeek through its hosted API, or any
+OpenAI-compatible logprob server (vLLM, SGLang) via `base_url`.
+
+```yaml
+verifier:
+  model:
+    name: deepseek/deepseek-v4-flash
+    api_key: $DEEPSEEK_API_KEY
+```
+
+```yaml
+verifier:
+  model:
+    name: openai/Qwen3.5-9B          # or any served model id
+    base_url: http://localhost:8000/v1
+    api_key: $OPENAI_API_KEY
+```
 
 ## API endpoints
 

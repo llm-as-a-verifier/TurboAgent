@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "turbo-agent"
-version = "0.1.3"
+version = "0.2.1"
 description = "An LLM API proxy that improves response quality through concurrent inference, pivot-tournament verification, and context refinement."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,7 +14,7 @@ dependencies = [
     "uvicorn>=0.27",
     "httpx>=0.27",
     "litellm>=1.40",
-    "llm-verifier>=0.1.0",
+    "llm-verifier>=0.2.0",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
 ]

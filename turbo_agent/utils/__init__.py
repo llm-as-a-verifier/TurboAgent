@@ -13,6 +13,7 @@ from .config import (
     PivotTournamentConfig,
     ProgressMonitorConfig,
 )
+from .verifier_client import build_verifier_client, verifier_model_id
 from .conversion import AnthropicToOpenAI, OpenAIToAnthropic, STOP_REASON_MAP
 from .sse import SSEFormatter
 from .llm import llm_completion, llm_stream_completion
@@ -30,6 +31,8 @@ __all__ = [
     "CriterionConfig",
     "PivotTournamentConfig",
     "ProgressMonitorConfig",
+    "build_verifier_client",
+    "verifier_model_id",
     "AnthropicToOpenAI",
     "OpenAIToAnthropic",
     "STOP_REASON_MAP",

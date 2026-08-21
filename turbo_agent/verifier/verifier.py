@@ -21,7 +21,8 @@ import llm_verifier
 from llm_verifier.fine_grained_reward import build_prompt, directed_reward
 from llm_verifier.prompts import normalize_criteria
 
-from ..utils import VerifierConfig, create_logger
+from ..utils import (VerifierConfig, build_verifier_client, create_logger,
+                     verifier_model_id)
 
 _logger = create_logger("verifier")
 
@@ -68,7 +69,8 @@ class Verifier:
     def __init__(self, cfg: VerifierConfig):
         self.cfg = cfg
         self.method = cfg.method
-        self.model_id = cfg.model.name.removeprefix("gemini/")
+        self.model_id = verifier_model_id(cfg.model)
+        self._client_built = False
         self.criteria = normalize_criteria(
             [{"name": c.name, "description": c.description}
              for c in self.method.criteria]
@@ -82,15 +84,13 @@ class Verifier:
 
     @property
     def client(self):
-        """A google-genai client built from the config's api_key/provider;
-        None lets llm-verifier create one from the environment."""
-        if self._client is None and self.cfg.model.api_key:
-            from google import genai
-            if self.cfg.model.provider == "vertex_ai":
-                self._client = genai.Client(vertexai=True,
-                                            api_key=self.cfg.model.api_key)
-            else:
-                self._client = genai.Client(api_key=self.cfg.model.api_key)
+        """The llm-verifier client for the configured model — Gemini,
+        DeepSeek, or any OpenAI-compatible logprob server, chosen by the
+        model-name prefix. None lets llm-verifier create one from the
+        environment."""
+        if not self._client_built:
+            self._client = build_verifier_client(self.cfg.model)
+            self._client_built = True
         return self._client
 
     # ------------------------------------------------------------------

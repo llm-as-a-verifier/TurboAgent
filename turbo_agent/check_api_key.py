@@ -163,6 +163,40 @@ class AnthropicChecker(ProviderChecker):
         return self._classify_http(resp, "models list reachable")
 
 
+class DeepSeekChecker(ProviderChecker):
+    """DeepSeek's hosted API — usable both as a backend model (``deepseek/``)
+    and as the verifier, which needs token logprobs. A reachable models list
+    is not enough, so this also confirms logprobs come back."""
+
+    name = "DeepSeek"
+    env_var = "DEEPSEEK_API_KEY"
+
+    def validate(self, key: str) -> Tuple[str, str]:
+        resp = httpx.post(
+            "https://api.deepseek.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}"},
+            json={
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+                "logprobs": True,
+                "top_logprobs": 5,
+            },
+            timeout=30.0,
+        )
+        status, detail = self._classify_http(resp, "generation OK")
+        if status != "ok":
+            return status, detail
+        try:
+            logprobs = resp.json()["choices"][0].get("logprobs")
+            has_logprobs = bool(logprobs and logprobs.get("content"))
+        except Exception:
+            has_logprobs = False
+        if has_logprobs:
+            return "ok", "generation + logprobs OK"
+        return "warn", "generation OK but no logprobs returned (verifier needs them)"
+
+
 class VertexChecker(ProviderChecker):
     """Vertex AI via google-genai — the verifier's logprob path.
 
@@ -244,6 +278,7 @@ def main() -> int:
     checkers: List[ProviderChecker] = [
         GeminiChecker(),
         VertexChecker(),
+        DeepSeekChecker(),
         OpenAIChecker(),
         AnthropicChecker(),
     ]

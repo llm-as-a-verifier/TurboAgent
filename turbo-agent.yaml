@@ -2,8 +2,8 @@ log_dir: default  # request logs go to .turbo-agent/<log_dir>/
 
 backend:
   models:
-    - name: gemini/gemini-2.5-flash
-      api_key: $VERTEX_API_KEY
+    - name: gemini/gemini-2.5-flash   # or anthropic/claude-opus-4-5,
+      api_key: $VERTEX_API_KEY        # deepseek/deepseek-chat, openai/gpt-4o
       num_candidates: 3        # parallel candidate responses per model
       temperature: 1
       thinking: high           # none, low, medium, high, or a token budget
@@ -14,6 +14,17 @@ verifier:
     name: gemini/gemini-2.5-flash
     api_key: $VERTEX_API_KEY
     provider: vertex_ai      # set + use $VERTEX_API_KEY if logprobs need Vertex
+
+    # The verifier scores with token logprobs, so any backend that returns
+    # them works — anthropic/ does not, and is rejected with an error.
+    # Swap the three lines above for either of these:
+    #
+    #   name: deepseek/deepseek-v4-flash
+    #   api_key: $DEEPSEEK_API_KEY
+    #
+    #   name: openai/Qwen3.5-9B          # a served model id
+    #   base_url: http://localhost:8000/v1
+    #   api_key: $OPENAI_API_KEY
 
   majority_voting: true        # skip the tournament when a majority of candidates agree
 

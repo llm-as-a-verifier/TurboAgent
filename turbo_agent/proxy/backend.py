@@ -60,8 +60,15 @@ class Backend:
             api_key = model.get("api_key", "")
             if not api_key:
                 continue
-            if model.get("name", "").startswith("gemini/"):
+            name = model.get("name", "")
+            if name.startswith("gemini/"):
                 os.environ["GEMINI_API_KEY"] = api_key
+            elif name.startswith("deepseek/"):
+                os.environ["DEEPSEEK_API_KEY"] = api_key
+            elif name.startswith("anthropic/"):
+                os.environ["ANTHROPIC_API_KEY"] = api_key
+            elif name.startswith("openai/"):
+                os.environ["OPENAI_API_KEY"] = api_key
 
     @property
     def model_name(self) -> str:

@@ -96,7 +96,28 @@ class AnthropicToOpenAI:
             else:
                 openai_messages.append({"role": role, "content": content})
 
-        return openai_messages
+        system_parts: list = []
+        conversation: list = []
+        for msg in openai_messages:
+            if msg.get("role") != "system":
+                conversation.append(msg)
+                continue
+            msg_content = msg.get("content")
+            if isinstance(msg_content, str):
+                system_parts.append(msg_content)
+            elif isinstance(msg_content, list):
+                for block in msg_content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        system_parts.append(block.get("text", ""))
+                    elif isinstance(block, str):
+                        system_parts.append(block)
+
+        system_parts = [part for part in system_parts if part]
+        if system_parts:
+            return [
+                {"role": "system", "content": "\n\n".join(system_parts)}
+            ] + conversation
+        return conversation
 
     @staticmethod
     def _convert_assistant_message(content: list) -> dict:

@@ -12,6 +12,7 @@ class ModelConfig:
     name: str
     provider: Optional[str] = None
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 
 @dataclass
@@ -151,10 +152,12 @@ class Config:
         if not raw_model or not raw_model.get("name"):
             return None
         raw_api_key = raw_model.get("api_key", "")
+        raw_base_url = raw_model.get("base_url", "")
         model_cfg = ModelConfig(
             name=raw_model["name"],
             provider=raw_model.get("provider"),
             api_key=self._resolve_env(raw_api_key) if raw_api_key else None,
+            base_url=self._resolve_env(raw_base_url) if raw_base_url else None,
         )
 
         raw_method = raw_v.get("method", {})
@@ -200,10 +203,12 @@ class Config:
         if not raw_model or not raw_model.get("name"):
             return None
         raw_api_key = raw_model.get("api_key", "")
+        raw_base_url = raw_model.get("base_url", "")
         model_cfg = ModelConfig(
             name=raw_model["name"],
             provider=raw_model.get("provider"),
             api_key=self._resolve_env(raw_api_key) if raw_api_key else None,
+            base_url=self._resolve_env(raw_base_url) if raw_base_url else None,
         )
         return ProgressMonitorConfig(
             model=model_cfg,
