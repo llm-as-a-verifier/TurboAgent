@@ -95,6 +95,12 @@ class Backend:
                 params["thinking_budget"] = int(thinking)
             elif isinstance(thinking, str):
                 params["reasoning_effort"] = thinking
+        # Route the model at any OpenAI-compatible endpoint.
+        if model.get("base_url") is not None:
+            params["base_url"] = model["base_url"]
+        # Gateways may require custom headers on every request.
+        if model.get("extra_headers"):
+            params["extra_headers"] = model["extra_headers"]
         return params
 
     def _base_params(self) -> dict:
@@ -118,32 +124,40 @@ class Backend:
                 entries.append(entry)
         return entries
 
+    @staticmethod
+    def _masked_model(model: dict) -> dict:
+        """Mask credentials before a model config lands in a request log."""
+        masked = {**model, "api_key": "***"}
+        if masked.get("extra_headers"):
+            masked["extra_headers"] = {
+                key: "***" for key in masked["extra_headers"]
+            }
+        return masked
+
     def _sanitized_config(self) -> dict:
         raw = dict(self.config.raw_config)
         if raw.get("backend", {}).get("models"):
             raw["backend"] = {
                 **raw["backend"],
                 "models": [
-                    {**m, "api_key": "***"} for m in raw["backend"]["models"]
+                    self._masked_model(m) for m in raw["backend"]["models"]
                 ],
             }
         if raw.get("context", {}).get("refinement_model"):
             raw["context"] = {
                 **raw["context"],
-                "refinement_model": {
-                    **raw["context"]["refinement_model"],
-                    "api_key": "***",
-                },
+                "refinement_model": self._masked_model(
+                    raw["context"]["refinement_model"]),
             }
         if raw.get("verifier", {}).get("model"):
             raw["verifier"] = {
                 **raw["verifier"],
-                "model": {**raw["verifier"]["model"], "api_key": "***"},
+                "model": self._masked_model(raw["verifier"]["model"]),
             }
         if raw.get("progress_monitor", {}).get("model"):
             raw["progress_monitor"] = {
                 **raw["progress_monitor"],
-                "model": {**raw["progress_monitor"]["model"], "api_key": "***"},
+                "model": self._masked_model(raw["progress_monitor"]["model"]),
             }
         return raw
 

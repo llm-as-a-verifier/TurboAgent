@@ -59,8 +59,17 @@ def build_verifier_client(cfg: ModelConfig) -> Optional[Any]:
     if cfg.name.startswith("openai/") or cfg.base_url:
         from llm_verifier.fine_grained_reward import create_openai_client
         # base_url=None falls back to OPENAI_BASE_URL in the environment.
-        return create_openai_client(base_url=cfg.base_url,
-                                    api_key=cfg.api_key)
+        client = create_openai_client(base_url=cfg.base_url,
+                                      api_key=cfg.api_key)
+        if cfg.extra_headers:
+            # create_openai_client() exposes no header argument; the openai
+            # SDK merges _custom_headers into every request, so a gateway
+            # that requires custom headers (e.g. x-opencode-session on the
+            # OpenCode Go endpoint) is routed correctly.
+            client._custom_headers = {
+                **client._custom_headers, **cfg.extra_headers,
+            }
+        return client
 
     if not cfg.api_key:
         return None

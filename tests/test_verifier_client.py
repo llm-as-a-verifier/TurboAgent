@@ -101,6 +101,48 @@ verifier:
         assert cfg.verifier_config.model.base_url == "http://localhost:9001/v1"
 
 
+def test_config_resolves_extra_headers_from_the_environment():
+    os.environ["TEST_SESSION_ID"] = "session-123"
+    yaml_text = """
+backend:
+  models:
+    - name: gemini/gemini-2.5-flash
+      api_key: test
+verifier:
+  model:
+    name: openai/local-model
+    api_key: test
+    base_url: http://localhost:9001/v1
+    extra_headers:
+      x-session: $TEST_SESSION_ID
+progress_monitor:
+  model:
+    name: openai/local-model
+    api_key: test
+    base_url: http://localhost:9001/v1
+    extra_headers:
+      x-session: $TEST_SESSION_ID
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "turbo-agent.yaml"
+        path.write_text(yaml_text)
+        cfg = Config(str(path))
+        assert cfg.verifier_config.model.extra_headers == {
+            "x-session": "session-123"}
+        assert cfg.progress_monitor_config.model.extra_headers == {
+            "x-session": "session-123"}
+
+
+def test_extra_headers_reach_the_verifier_client():
+    client = build_verifier_client(ModelConfig(
+        "openai/some-model", api_key="test-key",
+        base_url="http://localhost:9002/v1",
+        extra_headers={"User-Agent": "my-agent/1.0", "x-session": "abc"},
+    ))
+    assert client._custom_headers["User-Agent"] == "my-agent/1.0"
+    assert client._custom_headers["x-session"] == "abc"
+
+
 def _verifier_config(model_name):
     from turbo_agent.utils import (CriterionConfig, PivotTournamentConfig,
                                    VerifierConfig)

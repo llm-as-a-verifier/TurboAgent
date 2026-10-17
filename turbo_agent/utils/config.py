@@ -13,6 +13,7 @@ class ModelConfig:
     provider: Optional[str] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    extra_headers: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -95,11 +96,26 @@ class Config:
             return os.environ.get(value[1:], "")
         return value
 
+    @staticmethod
+    def _resolve_headers(raw: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
+        if not raw:
+            return None
+        return {
+            k: Config._resolve_env(v) if isinstance(v, str) else str(v)
+            for k, v in raw.items()
+        }
+
     def _expand_env_vars(self) -> None:
         for model in self.models:
             key = model.get("api_key", "")
             if isinstance(key, str) and key.startswith("$"):
                 model["api_key"] = self._resolve_env(key)
+            base_url = model.get("base_url", "")
+            if isinstance(base_url, str) and base_url.startswith("$"):
+                model["base_url"] = self._resolve_env(base_url)
+            headers = model.get("extra_headers")
+            if isinstance(headers, dict):
+                model["extra_headers"] = self._resolve_headers(headers)
 
     # ------------------------------------------------------------------
     # Backend
@@ -158,6 +174,7 @@ class Config:
             provider=raw_model.get("provider"),
             api_key=self._resolve_env(raw_api_key) if raw_api_key else None,
             base_url=self._resolve_env(raw_base_url) if raw_base_url else None,
+            extra_headers=self._resolve_headers(raw_model.get("extra_headers")),
         )
 
         raw_method = raw_v.get("method", {})
@@ -209,6 +226,7 @@ class Config:
             provider=raw_model.get("provider"),
             api_key=self._resolve_env(raw_api_key) if raw_api_key else None,
             base_url=self._resolve_env(raw_base_url) if raw_base_url else None,
+            extra_headers=self._resolve_headers(raw_model.get("extra_headers")),
         )
         return ProgressMonitorConfig(
             model=model_cfg,
